@@ -6,6 +6,7 @@
 library(readxl)
 library(dplyr)
 library(ggplot2)
+library(stringr)
 
 # 3. Definición de las rutas y hojas de los archivos
 ruta_base_datos                  <- "Datos.xlsx"
@@ -40,48 +41,107 @@ if (is.data.frame(df_escenarios) && is.data.frame(df_sociodemografia)) {
 }
 
 # 6. Gráfico Primer Actividad
-# Creamos el gráfico de escenarios con múltiple dimensiones teniendo como eje X el tiempo
-cat("Generando gráficos individuales y guardando en el disco...\n")
+cat("Generando gráficos de doble eje y guardando en el disco...\n")
 
-# Seed fija para reproducir resultados
 set.seed(5) 
 individuos_azar <- sample(unique(df_completo$identificacion), 3)
 
 for (individuo in individuos_azar) {
+  
+  # 1. Filtramos y preparamos la base
   df_indiv <- df_completo %>%
     filter(identificacion == individuo) %>%
-    arrange(`Hora actividad redondeada`) # Orden cronológico
+    arrange(`Hora actividad redondeada`) %>%
+    mutate(Hora_Limpia = format(as.POSIXct(`Hora actividad redondeada`), "%H:%M"))
   
-  # 2. Creamos el gráfico individual
-  grafico <- ggplot(df_indiv, aes(x = as.character(`Hora actividad redondeada`), 
-                                  y = `Etiqueta Actividad`, 
-                                  group = 1)) +
-    geom_point(color = "red", size = 3) +
-    geom_line(color = "red", alpha = 0.5, linetype = "dashed") +
-    labs(title = paste("Secuencia de Actividades Diarias"),
-         subtitle = paste("Individuo:", individuo), # El nombre cambia dinámicamente
-         x = "Hora de la Actividad",
-         y = "Tipo de Actividad") +
+  # 2. Obtenemos las categorías únicas
+  niveles_actividad <- levels(factor(df_indiv$`Etiqueta Actividad`))
+  niveles_interaccion_raw <- levels(factor(df_indiv$`Etiqueta Interacción`))
+  
+  if ("Estaba solo" %in% niveles_interaccion_raw) {
+    niveles_interaccion <- c("Estaba solo", setdiff(niveles_interaccion_raw, "Estaba solo"))
+  } else {
+    niveles_interaccion <- niveles_interaccion_raw
+  }
+  
+  n_act <- length(niveles_actividad)
+  n_int <- length(niveles_interaccion)
+  
+  # Ajuste de longitud de leyenda
+  etiquetas_actividad_cortas   <- str_wrap(niveles_actividad, width = 20)
+  etiquetas_interaccion_cortas <- str_wrap(niveles_interaccion, width = 20)
+  
+  # 3. Algoritmo de distribución equitativa
+  escala_interaccion <- function(x) {
+    if (n_int > 1 && n_act > 1) {
+      1 + (x - 1) * (n_act - 1) / (n_int - 1)
+    } else {
+      rep(max(n_act, 1) / 2, length(x)) 
+    }
+  }
+  
+  breaks_interaccion <- escala_interaccion(1:n_int)
+  
+  df_indiv <- df_indiv %>%
+    mutate(
+      Act_Num  = as.numeric(factor(`Etiqueta Actividad`, levels = niveles_actividad)),
+      Int_Rank = as.numeric(factor(`Etiqueta Interacción`, levels = niveles_interaccion)),
+      Int_Num  = escala_interaccion(Int_Rank)
+    )
+  
+  # 4. Creamos el gráfico
+  grafico <- ggplot(df_indiv, aes(x = Hora_Limpia)) +
+    
+    geom_point(aes(y = Act_Num), color = "red", size = 3) +
+    geom_line(aes(y = Act_Num, group = 1), color = "red", alpha = 10, linetype = "solid") +
+    
+    geom_point(aes(y = Int_Num), color = "blue", size = 3, shape=17) +
+    geom_line(aes(y = Int_Num, group = 1), color = "blue", alpha = 10, linetype = "solid") +
+    
+    # Achicado de etiquetas para que entren mejor en el gráfico
+    scale_y_continuous(
+      name = "Tipo de Actividad",
+      breaks = 1:n_act,
+      labels = etiquetas_actividad_cortas, # Pone el texto con salto de línea
+      limits = c(1, max(n_act, 1)), 
+      
+      sec.axis = sec_axis(
+        trans = ~., 
+        name = "Grupo Social (Interacción)", 
+        breaks = breaks_interaccion,
+        labels = etiquetas_interaccion_cortas #Agrega salto de línea a la leyenda
+      )
+    ) +
+    
+    labs(title = "Trayectoria Diaria: Actividad y Contexto Social",
+         subtitle = paste("Individuo:", individuo),
+         x = "Hora de la Actividad") +
+    
     theme_minimal() +
     theme(
       axis.text.x = element_text(angle = 45, hjust = 1),
-      panel.grid.minor = element_blank()
+      axis.line.x = element_line(color = "black", linewidth = 1),
+      panel.grid.minor = element_blank(),
+      
+      axis.line.y.left = element_line(color = "red", linewidth = 1),
+      axis.text.y.left = element_text(color = "red", size = 9),
+      axis.title.y.left = element_text(color = "red", face = "bold", margin = margin(r = 10)),
+      
+      axis.line.y.right = element_line(color = "blue", linewidth = 1),
+      axis.text.y.right = element_text(color = "blue", size = 9),
+      axis.title.y.right = element_text(color = "blue", face = "bold", margin = margin(l = 10))
     )
   
-  # 3. Definimos el nombre del archivo (Ej: "Grafico_Majo51309rodrigo.png")
-  nombre_archivo <- paste0("Grafico_", individuo, ".png")
-  
-  # 4. Guardamos el gráfico en el disco duro
-  # width y height están en pulgadas. dpi = 300 asegura calidad de impresión/publicación
+  # 5. Guardamos el gráfico con proporción exacta 16:9
+  nombre_archivo <- paste0("Grafico_Dual_Panoramico_", individuo, ".png")
   ggsave(filename = nombre_archivo, 
          plot = grafico, 
-         width = 8, 
-         height = 5, 
+         width = 16,
+         height = 9,
          dpi = 300,
-         bg = "white") # Fondo blanco para evitar transparencias extrañas en el PNG
+         bg = "white")
   
-  # Mensaje en consola para avisarte que se guardó exitosamente
-  cat("¡Gráfico guardado exitosamente como:", nombre_archivo, "!\n")
+  cat("Gráfico guardado como:", nombre_archivo, "\n")
 }
 
-cat("\nProceso terminado. Revisa tu carpeta de trabajo para ver las imágenes.\n")
+cat("\nScript terminado.\n")
