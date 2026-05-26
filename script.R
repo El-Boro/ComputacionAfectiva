@@ -46,6 +46,8 @@ cat("Generando gráficos de doble eje y guardando en el disco...\n")
 set.seed(5) 
 individuos_azar <- sample(unique(df_completo$identificacion), 3)
 
+horas_completas <- c(sprintf("%02d:00", 1:23), "00:00")
+
 for (individuo in individuos_azar) {
   
   # 1. Filtramos y preparamos la base
@@ -93,10 +95,12 @@ for (individuo in individuos_azar) {
   grafico <- ggplot(df_indiv, aes(x = Hora_Limpia)) +
     
     geom_point(aes(y = Act_Num), color = "red", size = 3) +
-    geom_line(aes(y = Act_Num, group = 1), color = "red", alpha = 10, linetype = "solid") +
+    geom_line(aes(y = Act_Num, group = 1), color = "red", alpha = 1, linetype = "solid") +
     
     geom_point(aes(y = Int_Num), color = "blue", size = 3, shape=17) +
-    geom_line(aes(y = Int_Num, group = 1), color = "blue", alpha = 10, linetype = "solid") +
+    geom_line(aes(y = Int_Num, group = 1), color = "blue", alpha = 1, linetype = "solid") +
+    
+    scale_x_discrete(limits = horas_completas) +
     
     # Achicado de etiquetas para que entren mejor en el gráfico
     scale_y_continuous(
@@ -109,13 +113,13 @@ for (individuo in individuos_azar) {
         trans = ~., 
         name = "Grupo Social (Interacción)", 
         breaks = breaks_interaccion,
-        labels = etiquetas_interaccion_cortas #Agrega salto de línea a la leyenda
+        labels = etiquetas_interaccion_cortas # Agrega salto de línea a la leyenda
       )
     ) +
     
     labs(title = "Trayectoria Diaria: Actividad y Contexto Social",
          subtitle = paste("Individuo:", individuo),
-         x = "Hora de la Actividad") +
+         x = "Hora del Día (Formato 24h)") +
     
     theme_minimal() +
     theme(
