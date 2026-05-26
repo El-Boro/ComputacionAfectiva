@@ -7,6 +7,7 @@ library(readxl)
 library(dplyr)
 library(ggplot2)
 library(stringr)
+library(tidyr)
 
 # 3. Definición de las rutas y hojas de los archivos
 ruta_base_datos                  <- "Datos.xlsx"
@@ -41,16 +42,18 @@ if (is.data.frame(df_escenarios) && is.data.frame(df_sociodemografia)) {
 }
 
 # 6. Gráfico Primer Actividad
-cat("Generando gráficos...\n")
+cat("Generando gráficos de 4 Dimensiones...\n")
 
-set.seed(5) 
+set.seed(8) 
 individuos_azar <- sample(unique(df_completo$identificacion), 3)
 
 horas_completas <- c(sprintf("%02d:00", 1:23), "00:00")
+# Vector con el orden de las emociones
+emociones_cols <- c("Preocupación", "Prisa", "Irritación", "Depresión", "Tensión", "Calma", "Disfrute")
 
 for (individuo in individuos_azar) {
   
-  # 1. Filtramos y preparamos la base
+  # 1. Filtramos y preparamos la base base
   df_indiv <- df_completo %>%
     filter(identificacion == individuo) %>%
     arrange(`Hora actividad redondeada`) %>%
@@ -59,7 +62,7 @@ for (individuo in individuos_azar) {
       Hora_Num = match(Hora_Limpia, horas_completas) 
     )
   
-  # 2. Obtenemos las categorías únicas para las 3 variables
+  # 2. Obtenemos las categorías únicas
   niveles_actividad <- levels(factor(df_indiv$`Etiqueta Actividad`))
   niveles_interaccion_raw <- levels(factor(df_indiv$`Etiqueta Interacción`))
   niveles_lugar <- levels(factor(df_indiv$`Lugar de actividad`))
@@ -73,27 +76,29 @@ for (individuo in individuos_azar) {
   n_act <- length(niveles_actividad)
   n_int <- length(niveles_interaccion)
   n_lug <- length(niveles_lugar)
+  n_emo <- length(emociones_cols) # Serán 7 siempre
   
   # Ajuste de longitud de leyenda
   etiquetas_actividad_cortas   <- str_wrap(niveles_actividad, width = 20)
   etiquetas_interaccion_cortas <- str_wrap(niveles_interaccion, width = 20)
   etiquetas_lugar_cortas       <- str_wrap(niveles_lugar, width = 20)
   
-  # 3. Algoritmo de distribución equitativa
+  # 3. Algoritmos de distribución equitativa
   escala_interaccion <- function(x) {
-    if (n_int > 1 && n_act > 1) { 1 + (x - 1) * (n_act - 1) / (n_int - 1) } 
-    else { rep(max(n_act, 1) / 2, length(x)) }
+    if (n_int > 1 && n_act > 1) { 1 + (x - 1) * (n_act - 1) / (n_int - 1) } else { rep(max(n_act, 1) / 2, length(x)) }
   }
-  
-  # Algoritmo para estirar el Lugar de Actividad
   escala_lugar <- function(x) {
-    if (n_lug > 1 && n_act > 1) { 1 + (x - 1) * (n_act - 1) / (n_lug - 1) } 
-    else { rep(max(n_act, 1) / 2, length(x)) }
+    if (n_lug > 1 && n_act > 1) { 1 + (x - 1) * (n_act - 1) / (n_lug - 1) } else { rep(max(n_act, 1) / 2, length(x)) }
+  }
+  escala_emocion <- function(x) {
+    if (n_emo > 1 && n_act > 1) { 1 + (x - 1) * (n_act - 1) / (n_emo - 1) } else { rep(max(n_act, 1) / 2, length(x)) }
   }
   
   breaks_interaccion <- escala_interaccion(1:n_int)
   breaks_lugar       <- escala_lugar(1:n_lug)
+  breaks_emocion     <- escala_emocion(1:n_emo)
   
+  # 4. Asignación numérica a la base principal
   df_indiv <- df_indiv %>%
     mutate(
       Act_Num  = as.numeric(factor(`Etiqueta Actividad`, levels = niveles_actividad)),
@@ -103,43 +108,56 @@ for (individuo in individuos_azar) {
       Lug_Num  = escala_lugar(Lug_Rank)
     )
   
-  # 4. Creamos el gráfico
-  grafico <- ggplot(df_indiv, aes(x = Hora_Num)) + 
-    
-    # Tipo de actividad
-    geom_point(aes(y = Act_Num), color = "red", size = 3) +
-    geom_line(aes(y = Act_Num, group = 1), color = "red", alpha = 1, linetype = "solid") +
-    
-    # Grupo social
-    geom_point(aes(y = Int_Num), color = "blue", size = 3, shape = 17) +
-    geom_line(aes(y = Int_Num, group = 1), color = "blue", alpha = 1, linetype = "solid") +
-    
-    # Lugar de actividad
-    geom_point(aes(y = Lug_Num), color = "black", size = 3, alpha = 0.7, shape = 15) +
-    geom_line(aes(y = Lug_Num, group = 1), color = "black", alpha = 1, linetype = "solid") +
-    
-  # Creación del eje negro extra
+  # Calcula la máxima emoción y preserva los empates generando múltiples filas
+  df_emo <- df_indiv %>%
+    select(identificacion, Hora_Num, all_of(emociones_cols)) %>%
+    pivot_longer(cols = all_of(emociones_cols), names_to = "Emocion", values_to = "Valor") %>%
+    filter(!is.na(Valor)) %>%
+    group_by(Hora_Num) %>%
+    filter(Valor == max(Valor, na.rm = TRUE)) %>% 
+    ungroup() %>%
+    mutate(
+      Emo_Rank = match(Emocion, emociones_cols),
+      Emo_Num  = escala_emocion(Emo_Rank)
+    )
   
-  # 1. Línea vertical del eje
-  annotate("segment", x = -4, xend = -4, y = -Inf, yend = +Inf, color = "black", linewidth = 1) +
-    # 2. Marca horizontal
-    annotate("segment", x = -4, xend = 0.5, y = -Inf, yend = -Inf, color = "black", linewidth = 1) +
-    # 3. Textos de las etiquetas
-    annotate("text", x = -4.5, y = breaks_lugar, label = etiquetas_lugar_cortas, hjust = 1, color = "black", size = 3) +
-    # 4. Título principal de este eje
-    annotate("text", x = -7, y = (1 + max(n_act, 1)) / 2, label = "Lugar de Actividad", angle = 90, fontface = "bold", color = "black", size = 3.5) +
+  # 5. Creamos el gráfico central
+  grafico <- ggplot() + 
     
-    # Permitimos a R dibujar por fuera del área cuadriculada para que aparezca nuestro eje
+    # Ejes Y
+    geom_point(data = df_indiv, aes(x = Hora_Num, y = Act_Num), color = "red", size = 3) +
+    geom_line(data = df_indiv, aes(x = Hora_Num, y = Act_Num, group = 1), color = "red", alpha = 1, linetype = "solid") +
+    
+    geom_point(data = df_indiv, aes(x = Hora_Num, y = Int_Num), color = "blue", size = 3, shape = 17) +
+    geom_line(data = df_indiv, aes(x = Hora_Num, y = Int_Num, group = 1), color = "blue", alpha = 1, linetype = "solid") +
+    
+    geom_point(data = df_indiv, aes(x = Hora_Num, y = Lug_Num), color = "black", size = 3, alpha = 0.7, shape = 15) +
+    geom_line(data = df_indiv, aes(x = Hora_Num, y = Lug_Num, group = 1), color = "black", alpha = 1, linetype = "solid") +
+    
+    geom_point(data = df_emo, aes(x = Hora_Num, y = Emo_Num), color = "green4", size = 3, shape = 18) +
+    geom_line(data = df_emo, aes(x = Hora_Num, y = Emo_Num, group = 1), color = "green4", alpha = 1, linetype = "solid") +
+    
+    # Eje negro manual usando anotaciones
+    annotate("segment", x = -2.5, xend = -2.5, y = -Inf, yend = +Inf, color = "black", linewidth = 1) +
+    annotate("segment", x = -2.5, xend = 0.5, y = -Inf, yend = -Inf, color = "black", linewidth = 1) +
+    annotate("text", x = -2.7, y = breaks_lugar, label = etiquetas_lugar_cortas, hjust = 1, color = "black", size = 3) +
+    annotate("text", x = -4.5, y = (1 + max(n_act, 1)) / 2, label = "Lugar de Actividad", angle = 90, fontface = "bold", color = "black", size = 3.5) +
+    
+    # Eje verde manual usando anotacions
+    annotate("segment", x = 27.5, xend = 27.5, y = -Inf, yend = +Inf, color = "green4", linewidth = 1) +
+    annotate("segment", x = 24.5, xend = 27.5, y = -Inf, yend = -Inf, color = "black", linewidth = 1) +
+    annotate("text", x = 27.7, y = breaks_emocion, label = emociones_cols, hjust = 0, color = "green4", size = 3) +
+    annotate("text", x = 29, y = (1 + max(n_act, 1)) / 2, label = "Emoción Predominante", angle = 270, fontface = "bold", color = "green4", size = 3.5) +
+    
+    # Configuración del lienzo expandido
     coord_cartesian(clip = "off", xlim = c(1, 24)) +
     
-    # Eje X Numérico (1 al 24) pero con etiquetas de texto (01:00 a 00:00)
     scale_x_continuous(
       breaks = 1:24,
       labels = horas_completas,
       expand = expansion(add = c(0.5, 0.5))
     ) +
     
-    # Ejes Y Nativos (Rojo y Azul)
     scale_y_continuous(
       name = "Tipo de Actividad",
       breaks = 1:n_act,
@@ -154,7 +172,7 @@ for (individuo in individuos_azar) {
       )
     ) +
     
-    labs(title = "Trayectoria Diaria: Actividad, Contexto Social y Lugar",
+    labs(title = "Trayectoria Diaria 4D: Actividad, Grupo Social, Lugar y Emociones",
          subtitle = paste("Individuo:", individuo),
          x = "Hora del Día (Formato 24h)") +
     
@@ -172,16 +190,15 @@ for (individuo in individuos_azar) {
       axis.text.y.right = element_text(color = "blue", size = 9),
       axis.title.y.right = element_text(color = "blue", face = "bold", margin = margin(l = 10)),
       
-      # Expandimos el margen para agregar a mano el eje extra
-      plot.margin = margin(t = 10, r = 10, b = 10, l = 200)
+      # 200px a la izquierda para el Negro y 250px a la derecha para el texto Verde
+      plot.margin = margin(t = 10, r = 250, b = 10, l = 200)
     )
   
-  # 5. Guardamos el gráfico con proporción exacta 16:9
   nombre_archivo <- paste0("Grafico_", individuo, ".png")
   ggsave(filename = nombre_archivo, 
          plot = grafico, 
-         width = 16,
-         height = 9,
+         width = 24,
+         height = 7,
          dpi = 300,
          bg = "white")
   
