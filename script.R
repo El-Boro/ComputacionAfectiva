@@ -320,6 +320,179 @@ df_resumen_interacciones <- df_interacciones_cognitivas %>%
 df_salida <- df_salida %>%
   left_join(df_resumen_interacciones, by = "identificacion")
 
+#-----------------------------------------------------------------------------------------------------
+#Segundo item de la segunda parte
 
+# =========================================================================
+# Filtrado por Actividades de Recuperación, Ocio y Cuidado Personal
+# =========================================================================
+
+cat("Filtrando dataframe por actividades de dedicación personal y entretenimiento...\n")
+
+# 1. Definimos las actividades de ocio/recuperación en un vector
+actividades_ocio <- c(
+  "Dedicación personal (comió, bañó, descansó)", 
+  "Entretenimiento (radio, televisión, computadora, juego en casa)"
+)
+
+# 2. Creamos el nuevo dataframe filtrando desde el original (df_completo)
+df_actividades_ocio <- df_completo %>%
+  filter(`Etiqueta Actividad Resumida` %in% actividades_ocio)
+
+
+# =========================================================================
+# Cálculo del tiempo total en actividades de ocio por individuo
+# =========================================================================
+
+cat("Calculando el tiempo total de ocio por individuo...\n")
+
+df_actividades_ocio <- df_actividades_ocio %>%
+  # 1. Agrupamos los datos por cada individuo
+  group_by(identificacion) %>%
+  
+  # 2. Creamos la nueva columna sumando los minutos de estas actividades
+  # Usamos na.rm = TRUE para ignorar celdas vacías y evitar errores
+  mutate(Total_Minutos_Ocio = sum(`Total en minutos de la actividad`, na.rm = TRUE)) %>%
+  ungroup()
+
+# =========================================================================
+# Cálculo de emociones positivas ponderadas en Ocio y Unión con df_salida
+# =========================================================================
+
+cat("Calculando emociones positivas ponderadas para actividades de ocio y uniendo...\n")
+
+# 1. Creamos un resumen temporal a partir del dataframe de ocio
+df_resumen_ocio <- df_actividades_ocio %>%
+  group_by(identificacion) %>%
+  summarise(
+    # Extraemos el tiempo total de ocio que ya habíamos calculado
+    Total_Minutos_Ocio = first(Total_Minutos_Ocio),
+    
+    # Calculamos las métricas ponderadas de bienestar
+    # Agregamos el sufijo "_Ocio_Pond" para identificarlas claramente
+    Calma_Ocio_Pond    = sum(`Minutos*Calma`, na.rm = TRUE) / first(Total_Minutos_Ocio),
+    Disfrute_Ocio_Pond = sum(`Minutos*Disfrute`, na.rm = TRUE) / first(Total_Minutos_Ocio)
+  ) %>%
+  ungroup()
+
+# 2. Añadimos estas nuevas columnas a nuestro df_salida
+df_salida <- df_salida %>%
+  left_join(df_resumen_ocio, by = "identificacion")
+
+# =========================================================================
+# Filtrado por tipo de Interacción Social (Entorno íntimo/familiar)
+# =========================================================================
+
+cat("Filtrando dataframe por interacciones sociales íntimas y familiares...\n")
+
+# 1. Definimos las interacciones del círculo íntimo en un vector
+interacciones_intimas <- c(
+  "Con sus hijos jóvenes o nietos", 
+  "Con amigos", 
+  "Con pareja e hijos", 
+  "Con su pareja", 
+  "Con otros familiares", 
+  "Con sus hijos adultos"
+)
+
+# 2. Creamos el nuevo dataframe filtrando desde el original (df_completo)
+df_interacciones_intimas <- df_completo %>%
+  filter(`Etiqueta Interacción` %in% interacciones_intimas)
+
+# =========================================================================
+# Cálculo del tiempo total en interacciones íntimas por individuo
+# =========================================================================
+
+cat("Calculando el tiempo total de interacciones íntimas por individuo...\n")
+
+df_interacciones_intimas <- df_interacciones_intimas %>%
+  # 1. Agrupamos los datos por cada individuo
+  group_by(identificacion) %>%
+  
+  # 2. Creamos la nueva columna sumando los minutos.
+  # na.rm = TRUE previene errores si hay celdas vacías
+  mutate(Total_Minutos_Intimos = sum(`Total en minutos de la actividad`, na.rm = TRUE)) %>%
+  ungroup()
+
+# =========================================================================
+# Cálculo de emociones positivas ponderadas en Interacciones Íntimas y Unión con df_salida
+# =========================================================================
+
+cat("Calculando emociones positivas ponderadas para interacciones íntimas y uniendo...\n")
+
+# 1. Creamos un resumen temporal a partir del dataframe de interacciones íntimas
+df_resumen_intimas <- df_interacciones_intimas %>%
+  group_by(identificacion) %>%
+  summarise(
+    # Extraemos el tiempo total que ya habíamos calculado
+    Total_Minutos_Intimos = first(Total_Minutos_Intimos),
+    
+    # Calculamos las métricas ponderadas de bienestar y satisfacción
+    # Agregamos el sufijo "_Intimo_Pond" para identificarlas claramente
+    Calma_Intimo_Pond      = sum(`Minutos*Calma`, na.rm = TRUE) / first(Total_Minutos_Intimos),
+    Disfrute_Intimo_Pond   = sum(`Minutos*Disfrute`, na.rm = TRUE) / first(Total_Minutos_Intimos),
+    A_gusto_Intimo_Pond    = sum(`Minutos*AgustInter`, na.rm = TRUE) / first(Total_Minutos_Intimos)
+  ) %>%
+  ungroup()
+
+# 2. Añadimos estas nuevas columnas a nuestro df_salida
+df_salida <- df_salida %>%
+  left_join(df_resumen_intimas, by = "identificacion")
+
+# =========================================================================
+# Filtrado por Actividades Físicas (Ejercicio o Paseo)
+# =========================================================================
+
+cat("Filtrando dataframe por actividades de ejercicio o paseo...\n")
+
+# Creamos el nuevo dataframe filtrando desde el original (df_completo)
+df_actividades_fisicas <- df_completo %>%
+  filter(`Etiqueta Actividad Resumida` == "Hizo ejercicio o dio paseo")
+
+# Verificación de los resultados
+cat("Dimensiones del dataframe original completo: ", dim(df_completo), "\n")
+cat("Dimensiones del nuevo dataframe de actividades físicas: ", dim(df_actividades_fisicas), "\n")
+
+# Comprobamos rápidamente que el filtro funcionó mostrando las categorías únicas
+cat("\nActividades presentes en el nuevo dataframe de actividades físicas:\n")
+print(unique(df_actividades_fisicas$`Etiqueta Actividad Resumida`))
+
+# =========================================================================
+# Cálculo del tiempo total en actividades físicas por individuo
+# =========================================================================
+
+cat("Calculando el tiempo total de actividades físicas por individuo...\n")
+
+df_actividades_fisicas <- df_actividades_fisicas %>%
+  # 1. Agrupamos los datos por cada individuo
+  group_by(identificacion) %>%
+  
+  # 2. Creamos la nueva columna sumando los minutos de estas actividades
+  # Usamos na.rm = TRUE para ignorar celdas vacías y evitar errores en la suma
+  mutate(Total_Minutos_Fisico = sum(`Total en minutos de la actividad`, na.rm = TRUE)) %>%
+  ungroup()
+
+# =========================================================================
+# Cálculo de emociones positivas ponderadas en Actividad Física y Unión
+# =========================================================================
+
+cat("Calculando emociones positivas ponderadas para actividades físicas y uniendo...\n")
+
+# 1. Creamos un resumen temporal a partir del dataframe de actividades físicas
+df_resumen_fisicas <- df_actividades_fisicas %>%
+  group_by(identificacion) %>%
+  summarise(
+    # Calculamos las métricas ponderadas de bienestar
+    # Agregamos el sufijo "_Fisico_Pond" para identificarlas claramente
+    Calma_Fisico_Pond    = sum(`Minutos*Calma`, na.rm = TRUE) / first(Total_Minutos_Fisico),
+    Disfrute_Fisico_Pond = sum(`Minutos*Disfrute`, na.rm = TRUE) / first(Total_Minutos_Fisico),
+    # Extraemos el tiempo total de actividad física que ya habíamos calculado
+    Total_Minutos_Fisico = first(Total_Minutos_Fisico)
+  ) %>%
+  ungroup()
+
+# 2. Añadimos estas nuevas columnas a nuestro df_salida original
+df_salida <- df_salida %>%
+  left_join(df_resumen_fisicas, by = "identificacion")
 
 cat("\nScript terminado.\n")
