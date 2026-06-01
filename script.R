@@ -41,6 +41,7 @@ if (is.data.frame(df_escenarios) && is.data.frame(df_sociodemografia)) {
   cat("Dimensiones del dataset final (Filas, Columnas): ", dim(df_completo), "\n")
 }
 
+
 # 6. Gráfico Primer Actividad
 cat("Generando gráficos de 4 Dimensiones...\n")
 
@@ -204,5 +205,121 @@ for (individuo in individuos_azar) {
   
   cat("Gráfico guardado como:", nombre_archivo, "\n")
 }
+#---------------------------------------------------------------------------------------------------
+  
+#SEGUNDO ITEM
+# =========================================================================
+# Filtrado de subconjunto de Actividades Específicas
+# =========================================================================
+
+cat("Filtrando dataframe por actividades específicas...\n")
+
+# Definimos las actividades que nos interesan en un vector
+actividades_objetivo <- c("Trabajó", "Leyó o estudió", "Leyó", "Trámites o Salud")
+
+# Creamos el nuevo dataframe filtrado
+df_actividades_cognitivas <- df_completo %>%
+  filter(`Etiqueta Actividad Resumida` %in% actividades_objetivo)
+
+# Verificación de los resultados
+cat("Dimensiones del dataframe original: ", dim(df_completo), "\n")
+cat("Dimensiones del nuevo dataframe: ", dim(df_actividades_cognitivas), "\n")
+
+# =========================================================================
+# Cálculo del tiempo total en actividades de deber por individuo
+# =========================================================================
+
+cat("Calculando el tiempo total de deberes por individuo...\n")
+
+df_actividades_cognitivas <- df_actividades_cognitivas %>%
+  # 1. Agrupamos los datos por cada individuo
+  group_by(identificacion) %>%
+  # 2. Creamos la nueva columna sumando los minutos. 
+  # na.rm = TRUE ignora los valores vacíos para que no dé error en la suma
+  mutate(Total_Minutos_Deber = sum(`Total en minutos de la actividad`, na.rm = TRUE)) %>%
+  # 3. Desagrupamos (¡Muy importante como buena práctica para no afectar futuros cálculos!)
+  ungroup()
+
+
+# =========================================================================
+# Generación de métricas afectivas ponderadas por individuo (df_salida)
+# =========================================================================
+
+cat("Calculando promedios ponderados de emociones por individuo...\n")
+
+df_salida <- df_actividades_cognitivas %>%
+  # 1. Agrupamos por individuo (cada persona será una fila al final)
+  group_by(identificacion) %>%
+  
+  # 2. Resumimos la información aplicando tu fórmula matemática
+  summarise(
+    # Dividimos la suma de los "Minutos * Emoción" sobre el Total de minutos de deber
+    # Usamos first() en Total_Minutos_Deber porque ese valor ya es el mismo en todas sus filas
+    Preocupacion_Pond = sum(`Minutos*Preoc`, na.rm = TRUE) / first(Total_Minutos_Deber),
+    Prisa_Pond        = sum(`Minutos*Prisa`, na.rm = TRUE) / first(Total_Minutos_Deber),
+    Irritacion_Pond   = sum(`Minutos*Irritación`, na.rm = TRUE) / first(Total_Minutos_Deber),
+    Depresion_Pond    = sum(`Minutos*Depresión`, na.rm = TRUE) / first(Total_Minutos_Deber),
+    Tension_Pond      = sum(`Minutos*Tensión`, na.rm = TRUE) / first(Total_Minutos_Deber),
+    
+    # 3. Almacenamos la columna del tiempo total de deber como solicitaste
+    Total_Minutos_Deber = first(Total_Minutos_Deber)
+  ) %>%
+  # 4. Desagrupamos por seguridad
+  ungroup()
+
+# =========================================================================
+# Filtrado por tipo de Interacción Social (Entorno público/laboral)
+# =========================================================================
+
+cat("Filtrando actividades de deber por interacciones sociales específicas...\n")
+
+# Definimos las interacciones que nos interesan en un vector
+interacciones_objetivo <- c(
+  "Con compañeros de trabajo / escuela / club", 
+  "Destinatario de nuestra actividad laboral (Cliente / paciente / alumno)", 
+  "Personal de servicios, responsables de nuestra actividad, extraños"
+)
+
+# Creamos el nuevo dataframe aplicando el filtro sobre el que ya teníamos
+df_interacciones_cognitivas <- df_completo %>%
+  filter(`Etiqueta Interacción` %in% interacciones_objetivo)
+
+# Verificación de los resultados
+cat("Dimensiones del dataframe de actividades (previo): ", dim(df_completo), "\n")
+cat("Dimensiones del nuevo dataframe (filtrado por interacción): ", dim(df_interacciones_cognitivas), "\n")
+
+# Comprobamos rápidamente que el filtro funcionó mostrando las interacciones únicas
+cat("\nInteracciones presentes en el nuevo dataframe:\n")
+print(unique(df_interacciones_cognitivas$`Etiqueta Interacción`))
+
+
+# =========================================================================
+# Cálculo de emociones ponderadas en Interacciones y Unión con df_salida
+# =========================================================================
+
+cat("Calculando emociones ponderadas para interacciones sociales y uniendo...\n")
+
+# 1. Creamos un resumen temporal a partir del dataframe de interacciones
+df_resumen_interacciones <- df_interacciones_cognitivas %>%
+  group_by(identificacion) %>%
+  summarise(
+    # Primero calculamos el tiempo total real dedicado a estas interacciones
+    Total_Minutos_Interaccion = sum(`Total en minutos de la actividad`, na.rm = TRUE),
+    
+    # Calculamos las métricas ponderadas dividiendo por el Total_Minutos_Interaccion
+    # Le agregamos el sufijo "_Inter" para distinguirlas de las generales
+    Preocupacion_Inter_Pond = sum(`Minutos*Preoc`, na.rm = TRUE) / Total_Minutos_Interaccion,
+    Prisa_Inter_Pond        = sum(`Minutos*Prisa`, na.rm = TRUE) / Total_Minutos_Interaccion,
+    Irritacion_Inter_Pond   = sum(`Minutos*Irritación`, na.rm = TRUE) / Total_Minutos_Interaccion,
+    Depresion_Inter_Pond    = sum(`Minutos*Depresión`, na.rm = TRUE) / Total_Minutos_Interaccion,
+    Tension_Inter_Pond      = sum(`Minutos*Tensión`, na.rm = TRUE) / Total_Minutos_Interaccion
+  ) %>%
+  ungroup()
+
+# 2. Añadimos estas nuevas columnas a nuestro df_salida
+df_salida <- df_salida %>%
+  left_join(df_resumen_interacciones, by = "identificacion")
+
+
 
 cat("\nScript terminado.\n")
