@@ -495,4 +495,203 @@ df_resumen_fisicas <- df_actividades_fisicas %>%
 df_salida <- df_salida %>%
   left_join(df_resumen_fisicas, by = "identificacion")
 
+#----------------------------------------------------------------------------------------------------
+# =========================================================================
+# Cruce de datos afectivos con variables Sociodemográficas
+# =========================================================================
+
+cat("Extrayendo perfiles sociodemográficos y cruzando con df_salida...\n")
+
+# 1. Extraemos 1 sola fila por individuo con sus datos demográficos desde df_completo
+df_sociodemo <- df_completo %>%
+  # Seleccionamos el ID y las columnas demográficas que nos interesan
+  select(identificacion, `Ingreso Familiar Mensual del Hogar`, `Máximo nivel de estudios alcanzado`, `Generación`) %>%
+  distinct(identificacion, .keep_all = TRUE)
+
+# 2. Unimos estos datos sociodemográficos a nuestro df_salida
+df_cruce <- df_salida %>%
+  left_join(df_sociodemo, by = "identificacion")
+
+# =========================================================================
+# Análisis Específico: Preocupación en el trabajo
+# =========================================================================
+
+cat("Calculando el promedio de preocupación según ingresos y educación...\n")
+
+resumen_preocupacion <- df_cruce %>%
+  
+  # 1. Agrupamos por los dos factores que quieres cruzar
+  group_by(`Ingreso Familiar Mensual del Hogar`, `Máximo nivel de estudios alcanzado`) %>%
+  
+  # 2. Calculamos el promedio de la preocupación ponderada y contamos cuántos son
+  summarise(
+    # mean() calcula el promedio. na.rm = TRUE ignora los casos vacíos
+    Promedio_Preocupacion = mean(Preocupacion_Pond, na.rm = TRUE),
+    
+    # n() nos dice cuántas personas cayeron en esta categoría exacta
+    Cantidad = n(),
+    
+    .groups = "drop" # Desagrupamos al terminar
+  ) %>%
+  
+  # 4. Ordenamos de mayor a menor preocupación para ver rápido quiénes están peor
+  arrange(desc(Promedio_Preocupacion))
+
+# =========================================================================
+# Gráfico: Preocupación en el Trabajo en Personas (por Ingresos y Educación)
+# =========================================================================
+
+# 1. Orden lógico creciente de Educación
+orden_educacion <- c(
+  "Primario Incompleto",
+  "Primario Completo", 
+  "Secundario Incompleto", 
+  "Secundario Completo", 
+  "Terciario Incompleto", 
+  "Terciarios Completo",
+  "Universitario Incompleto",
+  "Universitario Completo y más."
+)
+
+# 2. Orden lógico creciente de Ingresos
+orden_ingresos <- c(
+  "Ns-Ns",
+  "Hasta $4185",
+  "De $4186 a $8800",
+  "De $8801 a $15600",
+  "De $15601 a $42500",
+  "Más de $42500"
+)
+
+
+# =========================================================================
+# ANÁLISIS 1: Preocupación según NIVEL EDUCATIVO
+# =========================================================================
+
+cat("Calculando el promedio de preocupación según nivel educativo...\n")
+
+resumen_educacion <- df_cruce %>%
+  filter(!is.na(`Máximo nivel de estudios alcanzado`)) %>%
+  mutate(`Máximo nivel de estudios alcanzado` = factor(`Máximo nivel de estudios alcanzado`, levels = orden_educacion)) %>%
+  group_by(`Máximo nivel de estudios alcanzado`) %>%
+  summarise(
+    Promedio_Preocupacion = mean(Preocupacion_Pond, na.rm = TRUE),
+    Cantidad = n(),
+    .groups = "drop"
+  )
+
+cat("Generando gráfico de Educación...\n")
+
+grafico_educacion <- ggplot(resumen_educacion, aes(x = `Máximo nivel de estudios alcanzado`, y = Promedio_Preocupacion)) +
+  geom_col(fill = "steelblue", color = "black", width = 0.6) +
+  geom_text(aes(label = round(Promedio_Preocupacion, 2)), vjust = -0.5, fontface = "bold", size = 4) +
+  labs(
+    title = "Nivel de Preocupación en el Trabajo",
+    subtitle = "Promedio ponderado según Nivel Educativo",
+    x = "Nivel Educativo",
+    y = "Preocupación Promedio Ponderada"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, color = "gray40"),
+    axis.text.x = element_text(angle = 25, hjust = 1),
+    panel.grid.major.x = element_blank()
+  )
+
+ggsave("Grafico_Preoc_Educacion.png", plot = grafico_educacion, width = 10, height = 6, dpi = 300, bg="white")
+cat("Gráfico guardado: 'Grafico_Preoc_Educacion.png'.\n\n")
+
+
+# =========================================================================
+# ANÁLISIS 2: Preocupación según NIVEL DE INGRESOS
+# =========================================================================
+
+cat("Calculando el promedio de preocupación según nivel de ingresos...\n")
+
+resumen_ingresos <- df_cruce %>%
+  filter(!is.na(`Ingreso Familiar Mensual del Hogar`)) %>%
+  mutate(`Ingreso Familiar Mensual del Hogar` = factor(`Ingreso Familiar Mensual del Hogar`, levels = orden_ingresos)) %>%
+  group_by(`Ingreso Familiar Mensual del Hogar`) %>%
+  summarise(
+    Promedio_Preocupacion = mean(Preocupacion_Pond, na.rm = TRUE),
+    Cantidad = n(),
+    .groups = "drop"
+  )
+
+cat("Generando gráfico de Ingresos...\n")
+
+grafico_ingresos <- ggplot(resumen_ingresos, aes(x = `Ingreso Familiar Mensual del Hogar`, y = Promedio_Preocupacion)) +
+  geom_col(fill = "darkorange", color = "black", width = 0.6) +
+  geom_text(aes(label = round(Promedio_Preocupacion, 2)), vjust = -0.5, fontface = "bold", size = 4) +
+  labs(
+    title = "Nivel de Preocupación en el Trabajo",
+    subtitle = "Promedio ponderado según Nivel de Ingresos",
+    x = "Nivel de Ingresos Familiares",
+    y = "Preocupación Promedio Ponderada"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, color = "gray40"),
+    axis.text.x = element_text(angle = 15, hjust = 1),
+    panel.grid.major.x = element_blank()
+  )
+
+ggsave("Grafico_Preoc_Ingresos.png", plot = grafico_ingresos, width = 10, height = 6, dpi = 300, bg="white")
+cat("Gráfico guardado: 'Grafico_Preoc_Ingresos.png'.\n")
+
+# =========================================================================
+# ANÁLISIS 3: Depresión en el Trabajo según GENERACIÓN
+# =========================================================================
+
+cat("Calculando el promedio de depresión según generación...\n")
+
+# 1. Definir el orden lógico cronológico de las generaciones
+orden_generacion <- c(
+  "Tradicionalistas", 
+  "Baby Boomers", 
+  "Generación X", 
+  "Generación Y", 
+  "Generación Z"
+)
+
+# 2. Resumen de datos filtrando los valores nulos en Generación
+resumen_generacion <- df_cruce %>%
+  filter(!is.na(Generación)) %>%
+  mutate(Generación = factor(Generación, levels = orden_generacion)) %>%
+  group_by(Generación) %>%
+  summarise(
+    Promedio_Depresion = mean(Depresion_Pond, na.rm = TRUE),
+    Cantidad_Individuos = n(),
+    .groups = "drop"
+  )
+
+cat("Generando gráfico de Generación...\n")
+
+# 3. Creación del gráfico
+grafico_generacion <- ggplot(resumen_generacion, aes(x = Generación, y = Promedio_Depresion)) +
+  geom_col(fill = "purple4", color = "black", width = 0.6) +
+  geom_text(aes(label = round(Promedio_Depresion, 2)), vjust = -0.5, fontface = "bold", size = 4) +
+  labs(
+    title = "Nivel de Depresión en el Trabajo por Generación",
+    subtitle = "Promedio ponderado cruzado por grupo generacional",
+    x = "Generación",
+    y = "Depresión Promedio Ponderada"
+  ) +
+  theme_minimal() +
+  theme(
+    text = element_text(size = 12),
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, color = "gray40"),
+    axis.text.x = element_text(angle = 15, hjust = 1),
+    panel.grid.major.x = element_blank()
+  )
+
+# 4. Guardado del gráfico
+ggsave("Grafico_Depresion_Generacion.png", plot = grafico_generacion, width = 10, height = 6, dpi = 300, bg="white")
+cat("Gráfico guardado exitosamente como 'Grafico_Depresion_Generacion.png'.\n")
+
 cat("\nScript terminado.\n")
