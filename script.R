@@ -195,13 +195,14 @@ for (individuo in individuos_azar) {
       plot.margin = margin(t = 10, r = 250, b = 10, l = 200)
     )
   
-  nombre_archivo <- paste0("Grafico_", individuo, ".png")
+  nombre_archivo <- paste0("/GraficoEscenarios/Grafico_", individuo, ".png")
   ggsave(filename = nombre_archivo, 
          plot = grafico, 
          width = 24,
          height = 7,
          dpi = 300,
-         bg = "white")
+         bg = "white",
+         create.dir = TRUE)
   
   cat("Gráfico guardado como:", nombre_archivo, "\n")
 }
@@ -494,7 +495,7 @@ df_resumen_fisicas <- df_actividades_fisicas %>%
 # 2. Añadimos estas nuevas columnas a nuestro df_salida original
 df_salida <- df_salida %>%
   left_join(df_resumen_fisicas, by = "identificacion")
-
+write_csv(df_salida, "/df_salida.csv")
 #----------------------------------------------------------------------------------------------------
 # =========================================================================
 # Cruce de datos afectivos con variables Sociodemográficas
@@ -525,20 +526,17 @@ resumen_preocupacion <- df_cruce %>%
   
   # 2. Calculamos el promedio de la preocupación ponderada y contamos cuántos son
   summarise(
-    # mean() calcula el promedio. na.rm = TRUE ignora los casos vacíos
     Promedio_Preocupacion = mean(Preocupacion_Pond, na.rm = TRUE),
-    
-    # n() nos dice cuántas personas cayeron en esta categoría exacta
     Cantidad = n(),
     
-    .groups = "drop" # Desagrupamos al terminar
+    .groups = "drop"
   ) %>%
   
-  # 4. Ordenamos de mayor a menor preocupación para ver rápido quiénes están peor
+  # 4. Ordenamos de mayor a menor preocupación
   arrange(desc(Promedio_Preocupacion))
 
 # =========================================================================
-# Gráfico: Preocupación en el Trabajo en Personas (por Ingresos y Educación)
+# Gráfico: Preocupación en el Trabajo en Personas
 # =========================================================================
 
 # 1. Orden lógico creciente de Educación
@@ -600,7 +598,7 @@ grafico_ingresos <- ggplot(resumen_ingresos, aes(x = `Ingreso Familiar Mensual d
     panel.grid.major.x = element_blank()
   )
 
-ggsave("Grafico_Preoc_Ingresos.png", plot = grafico_ingresos, width = 10, height = 6, dpi = 300, bg="white")
+ggsave("/GraficoEmocionesYVarSociodemograficas/Grafico_Preoc_Ingresos.png", plot = grafico_ingresos, width = 10, height = 6, dpi = 300, bg="white",create.dir = TRUE)
 cat("Gráfico guardado: 'Grafico_Preoc_Ingresos.png'.\n")
 
 # =========================================================================
@@ -651,7 +649,7 @@ grafico_generacion <- ggplot(resumen_generacion, aes(x = Generación, y = Promed
   )
 
 # 4. Guardado del gráfico
-ggsave("Grafico_Depresion_Generacion.png", plot = grafico_generacion, width = 10, height = 6, dpi = 300, bg="white")
+ggsave("/GraficoEmocionesYVarSociodemograficas/Grafico_Depresion_Generacion.png", plot = grafico_generacion, width = 10, height = 6, dpi = 300, bg="white", create.dir = TRUE)
 cat("Gráfico guardado exitosamente como 'Grafico_Depresion_Generacion.png'.\n")
 
 # =========================================================================
@@ -693,7 +691,7 @@ grafico_agusto_ingresos <- ggplot(resumen_agusto_ingresos, aes(x = `Ingreso Fami
   )
 
 # 3. Guardado del gráfico
-ggsave("Grafico_Agusto_Intimo_Ingresos.png", plot = grafico_agusto_ingresos, width = 10, height = 6, dpi = 300, bg="white")
+ggsave("/GraficoEmocionesYVarSociodemograficas/Grafico_Agusto_Intimo_Ingresos.png", plot = grafico_agusto_ingresos, width = 10, height = 6, dpi = 300, bg="white", create.dir = TRUE)
 cat("Gráfico guardado exitosamente como 'Grafico_Agusto_Intimo_Ingresos.png'.\n")
 
 # =========================================================================
@@ -731,12 +729,12 @@ grafico_agusto_educacion <- ggplot(resumen_agusto_educacion, aes(x = `Máximo ni
     text = element_text(size = 12),
     plot.title = element_text(face = "bold", hjust = 0.5),
     plot.subtitle = element_text(hjust = 0.5, color = "gray40"),
-    axis.text.x = element_text(angle = 20, hjust = 1), # Un ángulo un poco mayor por si los textos son largos
+    axis.text.x = element_text(angle = 20, hjust = 1), 
     panel.grid.major.x = element_blank()
   )
 
 # 3. Guardado del gráfico
-ggsave("Grafico_Agusto_Intimo_Educacion.png", plot = grafico_agusto_educacion, width = 10, height = 6, dpi = 300, bg="white")
+ggsave("/GraficoEmocionesYVarSociodemograficas/Grafico_Agusto_Intimo_Educacion.png", plot = grafico_agusto_educacion, width = 10, height = 6, dpi = 300, bg="white", create.dir = TRUE)
 cat("Gráfico guardado exitosamente como 'Grafico_Agusto_Intimo_Educacion.png'.\n")
 
 # =========================================================================
@@ -753,7 +751,6 @@ df_cruce <- df_salida %>%
   left_join(df_sociodemo, by = "identificacion")
 
 # 1. Filtramos para quedarnos con los individuos que tengan datos en AMBAS variables
-# (Es decir, que hayan registrado horas de deberes Y horas de ocio)
 # También eliminamos NAs en género para tener grupos limpios
 df_costo_emocional <- df_cruce %>%
   filter(!is.na(Tension_Pond), !is.na(Calma_Ocio_Pond), !is.na(`¿Cuál es su género?`))
@@ -762,9 +759,6 @@ cat("Generando gráfico de dispersión (Scatter Plot) con líneas de tendencia..
 
 # 2. Creación del Gráfico de Dispersión
 grafico_costo_emocional <- ggplot(df_costo_emocional, aes(x = Tension_Pond, y = Calma_Ocio_Pond, color = `¿Cuál es su género?`)) +
-  
-  # Añadimos los puntos (cada punto es un individuo)
-  # alpha = 0.7 hace los puntos un poco transparentes para ver si se superponen
   geom_point(size = 3, alpha = 0.7) +
   
   # Añadimos la línea de tendencia matemática (regresión lineal: method = "lm")
@@ -781,7 +775,6 @@ grafico_costo_emocional <- ggplot(df_costo_emocional, aes(x = Tension_Pond, y = 
   ) +
   
   # Escala de colores personalizada para distinguir claramente los géneros
-  # Asumiendo los clásicos "Femenino" y "Masculino" (puedes ajustar si hay más categorías)
   scale_color_manual(values = c("Masculino" = "steelblue", "Femenino" = "darkred", "Otro" = "goldenrod")) +
   
   # Tema visual
@@ -791,18 +784,12 @@ grafico_costo_emocional <- ggplot(df_costo_emocional, aes(x = Tension_Pond, y = 
     plot.title = element_text(face = "bold", hjust = 0.5),
     plot.subtitle = element_text(hjust = 0.5, color = "gray40"),
     legend.position = "right",
-    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5) # Un borde sutil alrededor
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)
   )
 
 # 3. Guardado del gráfico
-ggsave("Grafico_Costo_Emocional.png", plot = grafico_costo_emocional, width = 10, height = 7, dpi = 300, bg="white")
+ggsave("/GraficoEmocionesYVarSociodemograficas/Grafico_Costo_Emocional.png", plot = grafico_costo_emocional, width = 10, height = 7, dpi = 300, bg="white", create.dir = TRUE)
 cat("Gráfico guardado exitosamente como 'Grafico_Costo_Emocional.png'.\n")
-
-# =========================================================================
-# Cálculo de la correlación de Pearson exacta
-# =========================================================================
-correlacion_general <- cor(df_costo_emocional$Tension_Pond, df_costo_emocional$Calma_Ocio_Pond)
-cat("\nLa correlación general (Pearson) entre Tensión laboral y Calma en el Ocio es:", round(correlacion_general, 3), "\n")
 
 # =========================================================================
 # ANÁLISIS 6: Análisis de "Déficit de Ocio" por Generación
@@ -810,7 +797,7 @@ cat("\nLa correlación general (Pearson) entre Tensión laboral y Calma en el Oc
 
 cat("Calculando el Déficit de Ocio (Ratio Deberes/Ocio) por generación...\n")
 
-# 1. Definir el orden lógico cronológico de las generaciones (si no lo hiciste en el paso anterior)
+# 1. Definir el orden lógico cronológico de las generaciones
 orden_generacion <- c(
   "Tradicionalistas", 
   "Baby Boomers", 
@@ -819,7 +806,7 @@ orden_generacion <- c(
   "Generación Z"
 )
 
-# 2. Resumen de datos: Calculamos el ratio y luego el promedio por generación
+# 2. Calculamos el ratio y luego el promedio por generación
 resumen_deficit_ocio <- df_cruce %>%
   # Filtramos NAs en las variables clave y en la Generación
   filter(!is.na(Total_Minutos_Deber), !is.na(Total_Minutos_Ocio), !is.na(Generación)) %>%
@@ -870,17 +857,16 @@ grafico_deficit_ocio <- ggplot(resumen_deficit_ocio, aes(x = Generación, y = Pr
   )
 
 # 4. Guardado del gráfico
-ggsave("Grafico_Deficit_Ocio_Generacion.png", plot = grafico_deficit_ocio, width = 10, height = 6, dpi = 300, bg="white")
+ggsave("/GraficoEmocionesYVarSociodemograficas/Grafico_Deficit_Ocio_Generacion.png", plot = grafico_deficit_ocio, width = 10, height = 6, dpi = 300, bg="white", create.dir = TRUE)
 cat("Gráfico guardado exitosamente como 'Grafico_Deficit_Ocio_Generacion.png'.\n")
 
 # =========================================================================
-# ANÁLISIS 7: Tiempo de Ocio vs. Nivel Socioeconómico (Ingresos)
+# ANÁLISIS 7: Tiempo de Ocio vs. Nivel Socioeconómico
 # =========================================================================
 
 cat("Calculando relación entre Tiempo de Ocio e Ingresos Familiares...\n")
 
 # 1. Preparación de los datos
-# Asegurándonos de que el vector de orden de ingresos exista (por si acaso)
 orden_ingresos <- c(
   "Hasta $4185",
   "De $4186 a $8800",
@@ -899,7 +885,6 @@ cat("Generando gráfico de cajas (Boxplot)...\n")
 # 2. Creación del Gráfico de Cajas
 grafico_ocio_ingresos <- ggplot(df_ocio_ingresos, aes(x = `Ingreso Familiar Mensual del Hogar`, y = Total_Minutos_Ocio, fill = `Ingreso Familiar Mensual del Hogar`)) +
   
-  # geom_boxplot crea el gráfico de cajas. alpha le da un poco de transparencia.
   geom_boxplot(alpha = 0.8, color = "black", outlier.color = "red", outlier.size = 2) +
   
   # Añadimos un punto extra para marcar explícitamente la MEDIA (promedio)
@@ -915,7 +900,6 @@ grafico_ocio_ingresos <- ggplot(df_ocio_ingresos, aes(x = `Ingreso Familiar Mens
     fill = "Nivel de Ingresos"
   ) +
   
-  # Escala de colores (puedes elegir otra paleta si prefieres)
   scale_fill_brewer(palette = "YlGnBu") +
   
   # Tema visual
@@ -925,13 +909,13 @@ grafico_ocio_ingresos <- ggplot(df_ocio_ingresos, aes(x = `Ingreso Familiar Mens
     plot.title = element_text(face = "bold", hjust = 0.5),
     plot.subtitle = element_text(hjust = 0.5, color = "gray40"),
     axis.text.x = element_text(angle = 15, hjust = 1),
-    legend.position = "none", # Quitamos la leyenda lateral porque el eje X ya lo explica
+    legend.position = "none",
     panel.grid.major.x = element_blank(),
-    panel.grid.minor = element_blank() # Quitamos líneas secundarias para mayor limpieza
+    panel.grid.minor = element_blank()
   )
 
 # 3. Guardado del gráfico
-ggsave("Grafico_Ocio_Socioeconomico.png", plot = grafico_ocio_ingresos, width = 10, height = 7, dpi = 300, bg="white")
+ggsave("/GraficoEmocionesYVarSociodemograficas/Grafico_Ocio_Socioeconomico.png", plot = grafico_ocio_ingresos, width = 10, height = 7, dpi = 300, bg="white", create.dir = TRUE)
 cat("Gráfico guardado exitosamente como 'Grafico_Ocio_Socioeconomico.png'.\n")
 
 cat("\nScript terminado.\n")
